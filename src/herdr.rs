@@ -79,5 +79,20 @@ pub fn initial_pane() -> Option<String> {
         }
     }
     let context: Value = serde_json::from_str(&std::env::var("HERDR_PLUGIN_CONTEXT_JSON").ok()?).ok()?;
-    context.get("focused_pane_id").and_then(Value::as_str).map(str::to_string)
+    context
+        .get("clicked_url")
+        .and_then(Value::as_str)
+        .and_then(pane_from_link)
+        .or_else(|| context.get("focused_pane_id").and_then(Value::as_str).map(str::to_string))
+}
+
+pub const LINK: &str = "https://agent-tokens.invalid/open";
+
+pub fn link_for_pane(pane_id: &str) -> String {
+    format!("{LINK}?pane={pane_id}")
+}
+
+fn pane_from_link(url: &str) -> Option<String> {
+    let query = url.strip_prefix(LINK)?.strip_prefix('?')?;
+    query.split('&').find_map(|pair| pair.strip_prefix("pane=")).filter(|p| !p.is_empty()).map(str::to_string)
 }

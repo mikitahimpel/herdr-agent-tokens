@@ -1,4 +1,5 @@
 mod herdr;
+mod statusline;
 mod ui;
 mod usage;
 mod worker;
@@ -54,8 +55,10 @@ impl App {
 }
 
 fn main() -> std::io::Result<()> {
-    if std::env::args().nth(1).as_deref() == Some("open") {
-        std::process::exit(herdr::open_dashboard());
+    match std::env::args().nth(1).as_deref() {
+        Some("open") => std::process::exit(herdr::open_dashboard()),
+        Some("statusline") => std::process::exit(statusline::run()),
+        _ => {}
     }
     let (request_tx, request_rx) = mpsc::channel();
     let (snapshot_tx, snapshot_rx) = mpsc::channel();

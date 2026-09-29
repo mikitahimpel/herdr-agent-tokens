@@ -28,7 +28,28 @@ Requires Herdr 0.7.1+ and a Rust toolchain (`cargo`); the install builds the bin
 herdr plugin install mikitahimpel/herdr-agent-tokens
 ```
 
-Herdr doesn't add plugin actions to its right-click menus, so bind the action to a key in `~/.config/herdr/config.toml`:
+## Open it with a click
+
+Herdr doesn't let plugins add items to its right-click menus, so the plugin ships a Claude Code status line instead. Inside Herdr it renders as a link:
+
+```
+◆ 209k/1M ctx · 88k out · ctrl-click for details
+```
+
+Ctrl-click it and the plugin's link handler opens the dashboard on that agent (the `agent-tokens.invalid` URL never reaches a browser). Add it to `~/.claude/settings.json`:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "$HOME/.config/herdr/plugins/github/agent-tokens-*/target/release/agent-tokens statusline"
+}
+```
+
+Use `herdr plugin list --plugin agent-tokens --json` to find the plugin root if yours differs. The status line also records each session's context window size, which lets the dashboard show a context gauge for Claude.
+
+## Keybinding
+
+You can also bind the action to a key in `~/.config/herdr/config.toml`:
 
 ```toml
 [[keys.command]]
