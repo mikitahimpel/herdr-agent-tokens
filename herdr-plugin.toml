@@ -1,10 +1,18 @@
 id = "agent-tokens"
 name = "Agent Tokens"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.7.1"
-description = "Show context and output token usage for Claude Code and Codex in the agent sidebar"
+description = "Detailed token usage panel for Claude Code and Codex agents"
 platforms = ["macos", "linux"]
 
-[[events]]
-on = "pane.agent_status_changed"
-command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/update.py\""]
+[[actions]]
+id = "details"
+title = "Token usage"
+contexts = ["pane"]
+command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/open.py\""]
+
+[[panes]]
+id = "details"
+title = "Token usage"
+placement = "overlay"
+command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/details.py\""]

@@ -1,16 +1,17 @@
 # herdr-agent-tokens
 
-A [Herdr](https://herdr.dev) plugin that shows token usage for each Claude Code and Codex agent in the Herdr agent sidebar.
+A [Herdr](https://herdr.dev) plugin that adds a **Token usage** panel for Claude Code and Codex agents.
 
-```
-✓ memoxia · 5
-  idle · 87.6k ctx · 11.7k out
-```
+Right-click an agent pane and choose **Token usage**. An overlay shows:
 
-- **ctx** — tokens in the context window on the latest turn (input + cache reads + cache writes).
-- **out** — output tokens generated over the whole session.
+- **Context**: current and peak context size, a fill bar when the context window is known (Codex), and compaction count.
+- **Session totals**: API calls, uncached input, cache writes, cache reads with hit rate, output with reasoning tokens, and total processed tokens.
+- **By model**: per-model split when a session used more than one model.
+- **Subagents**: token usage of each Claude Code subagent, and a combined total.
+- **Rate limits**: Codex primary/secondary window usage and reset times.
+- **Recent prompts**: the last 15 prompts with API calls, output tokens, and context size for each.
 
-The status updates each time an agent finishes a turn (`idle` / `done`).
+Keys: `r` refresh (it also refreshes every 5 seconds) · `j`/`k` or arrows scroll · `space`/`b` page · `g`/`G` top/bottom · `q` or `esc` close.
 
 ## Install
 
@@ -24,15 +25,15 @@ Or from a local checkout:
 herdr plugin link /path/to/herdr-agent-tokens
 ```
 
-Requires Herdr 0.7.1+ and `python3` on `PATH`.
+Requires Herdr 0.7.1+ and `python3` (3.9+) on `PATH`.
 
 ## How it works
 
-The plugin subscribes to `pane.agent_status_changed`. When an agent becomes ready, it resolves the pane's agent session with `herdr agent get`, reads the session transcript, and sets the pane's sidebar status with `herdr pane report-metadata --custom-status`.
+The `details` action resolves the pane from the action context and opens the `details` overlay pane for it. The panel resolves the agent session with `herdr agent get` and reads the session transcript:
 
-| Agent  | Transcript                                         |
-| ------ | -------------------------------------------------- |
-| claude | `~/.claude/projects/*/<session-id>.jsonl`          |
+| Agent  | Transcript                                                               |
+| ------ | ------------------------------------------------------------------------ |
+| claude | `~/.claude/projects/*/<session-id>.jsonl` and `<session-id>/subagents/`  |
 | codex  | `$CODEX_HOME/sessions/YYYY/MM/DD/*<session-id>.jsonl` (default `~/.codex`) |
 
-Other agents are ignored.
+Other agents show a message that usage isn't available.
