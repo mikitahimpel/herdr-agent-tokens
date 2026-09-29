@@ -1,0 +1,10 @@
+id = "agent-tokens"
+name = "Agent Tokens"
+version = "0.1.0"
+min_herdr_version = "0.7.1"
+description = "Show context and output token usage for Claude Code and Codex in the agent sidebar"
+platforms = ["macos", "linux"]
+
+[[events]]
+on = "pane.agent_status_changed"
+command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/update.py\""]
