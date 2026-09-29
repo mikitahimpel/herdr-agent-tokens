@@ -1,9 +1,13 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+use std::thread;
 
 use chrono::{DateTime, Local, TimeZone};
+use serde::Deserialize;
+use serde_json::value::RawValue;
 use serde_json::Value;
 
 #[derive(Clone, Copy, Default)]
@@ -216,24 +220,90 @@ pub fn load(agent: &str, session_id: &str, transcript: &Path) -> Report {
     report
 }
 
-fn claude_call(usage: &Value) -> Totals {
-    Totals {
-        calls: 1,
-        input: num(usage, "input_tokens"),
-        cache_write: num(usage, "cache_creation_input_tokens"),
-        cache_read: num(usage, "cache_read_input_tokens"),
-        output: num(usage, "output_tokens"),
-        reasoning: usage.get("output_tokens_details").map(|d| num(d, "thinking_tokens")).unwrap_or(0),
+#[derive(Deserialize)]
+struct ClaudeEntry<'a> {
+    #[serde(rename = "type", borrow, default)]
+    kind: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    subtype: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    timestamp: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    cwd: Option<Cow<'a, str>>,
+    #[serde(rename = "gitBranch", borrow, default)]
+    git_branch: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    version: Option<Cow<'a, str>>,
+    #[serde(rename = "isSidechain", default)]
+    is_sidechain: Option<bool>,
+    #[serde(rename = "isMeta", default)]
+    is_meta: Option<bool>,
+    #[serde(borrow, default)]
+    message: Option<ClaudeMessage<'a>>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeMessage<'a> {
+    #[serde(borrow, default)]
+    id: Option<Cow<'a, str>>,
+    #[serde(borrow, default)]
+    model: Option<Cow<'a, str>>,
+    #[serde(default)]
+    usage: Option<ClaudeUsage>,
+    #[serde(borrow, default)]
+    content: Option<&'a RawValue>,
+}
+
+#[derive(Deserialize)]
+struct ClaudeUsage {
+    input_tokens: Option<u64>,
+    cache_creation_input_tokens: Option<u64>,
+    cache_read_input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+    output_tokens_details: Option<OutputDetails>,
+}
+
+#[derive(Deserialize)]
+struct OutputDetails {
+    thinking_tokens: Option<u64>,
+}
+
+impl ClaudeUsage {
+    fn totals(&self) -> Totals {
+        Totals {
+            calls: 1,
+            input: self.input_tokens.unwrap_or(0),
+            cache_write: self.cache_creation_input_tokens.unwrap_or(0),
+            cache_read: self.cache_read_input_tokens.unwrap_or(0),
+            output: self.output_tokens.unwrap_or(0),
+            reasoning: self.output_tokens_details.as_ref().and_then(|d| d.thinking_tokens).unwrap_or(0),
+        }
     }
 }
 
-fn claude_prompt(content: &Value) -> Option<String> {
-    match content {
-        Value::String(s) => Some(s.clone()),
+/// Calls `visit` for every parseable line, reading with a large buffer.
+fn each_line(path: &Path, mut visit: impl FnMut(&str)) {
+    let Ok(file) = File::open(path) else { return };
+    let mut reader = BufReader::with_capacity(1 << 20, file);
+    let mut line = String::new();
+    while matches!(reader.read_line(&mut line), Ok(n) if n > 0) {
+        visit(&line);
+        line.clear();
+    }
+}
+
+fn parse_stamp(raw: Option<&str>) -> Option<DateTime<Local>> {
+    DateTime::parse_from_rfc3339(raw?).ok().map(|t| t.with_timezone(&Local))
+}
+
+fn claude_prompt(content: &RawValue) -> Option<String> {
+    let raw = content.get();
+    if raw.contains("\"tool_result\"") {
+        return None;
+    }
+    match serde_json::from_str::<Value>(raw).ok()? {
+        Value::String(s) => Some(s),
         Value::Array(parts) => {
-            if parts.iter().any(|p| text(p, "type") == Some("tool_result")) {
-                return None;
-            }
             let texts: Vec<&str> =
                 parts.iter().filter(|p| text(p, "type") == Some("text")).filter_map(|p| text(p, "text")).collect();
             (!texts.is_empty()).then(|| texts.join(" "))
@@ -246,80 +316,107 @@ fn load_claude(report: &mut Report) {
     let mut seen = HashSet::new();
     let mut models: HashMap<String, Totals> = HashMap::new();
     let mut turn = None;
+    let (mut first, mut last) = (None, None);
+    let path = report.transcript.clone();
 
-    for entry in read_jsonl(&report.transcript.clone()) {
-        if entry.get("isSidechain").and_then(Value::as_bool) == Some(true) {
-            continue;
+    each_line(&path, |line| {
+        let Ok(entry) = serde_json::from_str::<ClaudeEntry>(line) else { return };
+        if entry.is_sidechain == Some(true) {
+            return;
         }
-        report.observe(parse_time(&entry));
-        for (key, field) in [("cwd", &mut report.cwd), ("gitBranch", &mut report.branch), ("version", &mut report.version)] {
-            if let Some(value) = text(&entry, key) {
-                *field = value.to_string();
+        if let Some(stamp) = &entry.timestamp {
+            if first.is_none() {
+                first = Some(stamp.to_string());
+            }
+            last = Some(stamp.to_string());
+        }
+        for (value, field) in [(&entry.cwd, &mut report.cwd), (&entry.git_branch, &mut report.branch), (&entry.version, &mut report.version)] {
+            if let Some(value) = value.as_deref().filter(|v| !v.is_empty()) {
+                if field != value {
+                    *field = value.to_string();
+                }
             }
         }
-        if text(&entry, "type") == Some("system") && text(&entry, "subtype") == Some("compact_boundary") {
+        let kind = entry.kind.as_deref();
+        if kind == Some("system") && entry.subtype.as_deref() == Some("compact_boundary") {
             report.compactions += 1;
         }
-        let Some(message) = entry.get("message").filter(|m| m.is_object()) else { continue };
+        let Some(message) = &entry.message else { return };
 
-        if text(&entry, "type") == Some("user") && entry.get("isMeta").and_then(Value::as_bool) != Some(true) {
-            if let Some(prompt) = message.get("content").and_then(claude_prompt).filter(|p| is_user_prompt(p)) {
-                report.turns.push(Turn { started: parse_time(&entry), prompt: one_line(&prompt), totals: Totals::default(), context: 0 });
+        if kind == Some("user") && entry.is_meta != Some(true) {
+            if let Some(prompt) = message.content.and_then(claude_prompt).filter(|p| is_user_prompt(p)) {
+                let started = parse_stamp(entry.timestamp.as_deref());
+                report.turns.push(Turn { started, prompt: one_line(&prompt), totals: Totals::default(), context: 0 });
                 turn = Some(report.turns.len() - 1);
             }
-            continue;
+            return;
         }
 
-        let Some(usage) = message.get("usage").filter(|u| u.is_object()) else { continue };
-        if let Some(id) = text(message, "id") {
+        let Some(usage) = &message.usage else { return };
+        if let Some(id) = &message.id {
             if !seen.insert(id.to_string()) {
-                continue;
+                return;
             }
         }
-        let call = claude_call(usage);
-        let model = text(message, "model").unwrap_or("unknown");
+        let call = usage.totals();
+        let model = message.model.as_deref().unwrap_or("unknown");
         if !model.starts_with('<') {
             models.entry(model.to_string()).or_default().add(&call);
         }
         report.record(call, call.prompt(), turn);
-    }
+    });
 
+    report.started = parse_stamp(first.as_deref());
+    report.updated = parse_stamp(last.as_deref());
     report.models = sorted_models(models);
     report.subagents = claude_subagents(&report.transcript.with_extension("").join("subagents"));
 }
 
-fn claude_subagents(dir: &Path) -> Vec<Subagent> {
-    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
-    let mut subagents = Vec::new();
-    for path in entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "jsonl")) {
-        let meta: Value = fs::read_to_string(path.with_extension("meta.json"))
-            .ok()
-            .and_then(|raw| serde_json::from_str(&raw).ok())
-            .unwrap_or(Value::Null);
-        let mut totals = Totals::default();
-        let mut model = text(&meta, "model").unwrap_or("").to_string();
-        let mut seen = HashSet::new();
-        for entry in read_jsonl(&path) {
-            let Some(message) = entry.get("message") else { continue };
-            let Some(usage) = message.get("usage").filter(|u| u.is_object()) else { continue };
-            if let Some(id) = text(message, "id") {
-                if !seen.insert(id.to_string()) {
-                    continue;
-                }
+fn claude_subagent(path: &Path) -> Option<Subagent> {
+    let meta: Value = fs::read_to_string(path.with_extension("meta.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str(&raw).ok())
+        .unwrap_or(Value::Null);
+    let mut totals = Totals::default();
+    let mut model = text(&meta, "model").unwrap_or("").to_string();
+    let mut seen = HashSet::new();
+    each_line(path, |line| {
+        let Ok(entry) = serde_json::from_str::<ClaudeEntry>(line) else { return };
+        let Some(message) = &entry.message else { return };
+        let Some(usage) = &message.usage else { return };
+        if let Some(id) = &message.id {
+            if !seen.insert(id.to_string()) {
+                return;
             }
-            totals.add(&claude_call(usage));
-            if let Some(m) = text(message, "model").filter(|m| !m.starts_with('<')) {
+        }
+        totals.add(&usage.totals());
+        if let Some(m) = message.model.as_deref().filter(|m| !m.starts_with('<')) {
+            if model != m {
                 model = m.to_string();
             }
         }
-        if totals.calls > 0 {
-            let name = text(&meta, "description")
-                .or_else(|| text(&meta, "agentType"))
-                .map(str::to_string)
-                .unwrap_or_else(|| path.file_stem().unwrap_or_default().to_string_lossy().into_owned());
-            subagents.push(Subagent { name: one_line(&name), model, totals });
-        }
-    }
+    });
+    (totals.calls > 0).then(|| {
+        let name = text(&meta, "description")
+            .or_else(|| text(&meta, "agentType"))
+            .map(str::to_string)
+            .unwrap_or_else(|| path.file_stem().unwrap_or_default().to_string_lossy().into_owned());
+        Subagent { name: one_line(&name), model, totals }
+    })
+}
+
+fn claude_subagents(dir: &Path) -> Vec<Subagent> {
+    let Ok(entries) = fs::read_dir(dir) else { return Vec::new() };
+    let paths: Vec<PathBuf> =
+        entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "jsonl")).collect();
+    let workers = thread::available_parallelism().map_or(4, |n| n.get()).min(paths.len().max(1));
+    let mut subagents: Vec<Subagent> = thread::scope(|scope| {
+        let handles: Vec<_> = paths
+            .chunks(paths.len().div_ceil(workers).max(1))
+            .map(|chunk| scope.spawn(move || chunk.iter().filter_map(|p| claude_subagent(p)).collect::<Vec<_>>()))
+            .collect();
+        handles.into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()
+    });
     subagents.sort_by(|a, b| b.totals.output.cmp(&a.totals.output));
     subagents
 }

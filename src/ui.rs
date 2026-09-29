@@ -160,6 +160,7 @@ fn draw_agents(frame: &mut Frame, area: Rect, app: &mut App) {
         .map(|agent| {
             let context = match snapshot.usage.get(&agent.pane_id) {
                 Some(Usage::Ready(report)) => compact(report.context),
+                Some(Usage::Loading) => "…".to_string(),
                 _ => String::new(),
             };
             let name = clip(&agent.workspace, width.saturating_sub(context.len() + 3));
@@ -199,6 +200,7 @@ fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
         Some(Usage::Ready(report)) => report.clone(),
         other => {
             let message = match other {
+                Some(Usage::Loading) => "Reading transcript…".to_string(),
                 Some(Usage::Unsupported) => format!("Token usage isn't available for {} agents yet.", agent.kind),
                 Some(Usage::NoSession) => "Herdr hasn't reported a session for this agent yet.".to_string(),
                 _ => "No transcript found for this session.".to_string(),
