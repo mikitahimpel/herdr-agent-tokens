@@ -18,4 +18,4 @@ command = ["target/release/agent-tokens", "open"]
 id = "dashboard"
 title = "Agent Tokens"
 placement = "overlay"
-command = ["target/release/agent-tokens"]
+command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/target/release/agent-tokens\""]
