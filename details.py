@@ -122,7 +122,7 @@ def render(pane_id, report, error, width):
         f"  {BOLD}{ACCENT}{report.agent}{RESET}{BOLD} token usage{RESET} {DIM}· pane {pane_id}{RESET}",
         f"  {DIM}{clip(report.cwd, inner)}{f' · {report.branch}' if report.branch else ''}{RESET}",
         f"  {DIM}session {report.session_id} · v{report.version or '?'} · "
-        f"{duration(report.started, report.updated)} · {len(report.turns)} prompts{RESET}",
+        f"{duration(report.started, report.updated)} · {len(report.turns)} prompt{'' if len(report.turns) == 1 else 's'}{RESET}",
     ]
 
     lines += section("Context", inner)
