@@ -1,6 +1,6 @@
 id = "agent-tokens"
 name = "Agent Tokens"
-version = "0.6.0"
+version = "0.7.0"
 min_herdr_version = "0.9.0"
 description = "Token usage dashboard for Claude Code and Codex agents"
 platforms = ["macos", "linux"]
@@ -17,9 +17,7 @@ command = ["target/release/agent-tokens", "open"]
 [[panes]]
 id = "dashboard"
 title = "Agent Tokens"
-placement = "popup"
-width = "80%"
-height = "75%"
+placement = "overlay"
 command = ["sh", "-c", "exec \"$HERDR_PLUGIN_ROOT/target/release/agent-tokens\""]
 
 [[panes]]
