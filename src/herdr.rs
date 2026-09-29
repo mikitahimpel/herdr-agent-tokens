@@ -63,13 +63,17 @@ pub fn list_agents() -> Option<Vec<Agent>> {
 }
 
 pub fn open_dashboard() -> i32 {
+    open_dashboard_for(initial_pane())
+}
+
+pub fn open_dashboard_for(pane: Option<String>) -> i32 {
     let plugin = std::env::var("HERDR_PLUGIN_ID").unwrap_or_else(|_| "agent-tokens".to_string());
     let mut command = Command::new(herdr_bin());
     command.args(["plugin", "pane", "open", "--plugin", &plugin, "--entrypoint", "dashboard", "--focus"]);
-    if let Some(pane) = initial_pane() {
+    if let Some(pane) = pane {
         command.args(["--env", &format!("AGENT_TOKENS_PANE={pane}")]);
     }
-    command.status().ok().and_then(|s| s.code()).unwrap_or(1)
+    command.output().ok().and_then(|o| o.status.code()).unwrap_or(1)
 }
 
 pub fn initial_pane() -> Option<String> {
@@ -79,20 +83,6 @@ pub fn initial_pane() -> Option<String> {
         }
     }
     let context: Value = serde_json::from_str(&std::env::var("HERDR_PLUGIN_CONTEXT_JSON").ok()?).ok()?;
-    context
-        .get("clicked_url")
-        .and_then(Value::as_str)
-        .and_then(pane_from_link)
-        .or_else(|| context.get("focused_pane_id").and_then(Value::as_str).map(str::to_string))
+    context.get("focused_pane_id").and_then(Value::as_str).map(str::to_string)
 }
 
-pub const LINK: &str = "https://agent-tokens.invalid/open";
-
-pub fn link_for_pane(pane_id: &str) -> String {
-    format!("{LINK}?pane={pane_id}")
-}
-
-fn pane_from_link(url: &str) -> Option<String> {
-    let query = url.strip_prefix(LINK)?.strip_prefix('?')?;
-    query.split('&').find_map(|pair| pair.strip_prefix("pane=")).filter(|p| !p.is_empty()).map(str::to_string)
-}

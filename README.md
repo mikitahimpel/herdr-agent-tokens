@@ -28,24 +28,21 @@ Requires Herdr 0.9.0+ (the dashboard opens as a floating popup) and a Rust toolc
 herdr plugin install mikitahimpel/herdr-agent-tokens
 ```
 
-## Open it with a click
+## Token bar
 
-Herdr doesn't let plugins add items to its right-click menus, so the plugin ships a Claude Code status line instead. Inside Herdr it renders as a link:
+A compact, always-visible pane that lists every agent as a chip with its context and output. Click a chip and the dashboard opens as a popup for that agent. No keys needed.
 
 ```
-◆ 209k/1M ctx · 88k out · ctrl-click for details
+ ◆ Agent Tokens  click an agent for details                         5 agents · 3.15M out total
+  ● herdr-agent-history pD 670k ctx  364k out   ● mascot-design-lab p2 211k ctx  1.97M out
+  ● memoxia p6 526k ctx  254k out   ● memoxia p9 248k ctx  114k out
 ```
 
-Ctrl-click it and the plugin's link handler opens the dashboard on that agent (the `agent-tokens.invalid` URL never reaches a browser). Add it to `~/.claude/settings.json`:
+Open it below a pane (it's a normal pane, so drag its border to size it):
 
-```json
-"statusLine": {
-  "type": "command",
-  "command": "$HOME/.config/herdr/plugins/github/agent-tokens-*/target/release/agent-tokens statusline"
-}
+```sh
+herdr plugin pane open --plugin agent-tokens --entrypoint bar --placement split --target-pane <pane_id> --direction down --no-focus
 ```
-
-Use `herdr plugin list --plugin agent-tokens --json` to find the plugin root if yours differs. The status line also records each session's context window size, which lets the dashboard show a context gauge for Claude.
 
 ## Keybinding
 

@@ -15,19 +15,19 @@ use crate::usage::{ratio, Report, Totals};
 use crate::worker::{Usage, REFRESH};
 use crate::{App, TABS};
 
-const TEXT: Color = Color::Rgb(205, 214, 244);
-const SUBTEXT: Color = Color::Rgb(166, 173, 200);
-const MUTED: Color = Color::Rgb(108, 112, 134);
-const SURFACE: Color = Color::Rgb(49, 50, 68);
-const SELECTED: Color = Color::Rgb(40, 42, 58);
-const MAUVE: Color = Color::Rgb(203, 166, 247);
-const BLUE: Color = Color::Rgb(137, 180, 250);
-const SAPPHIRE: Color = Color::Rgb(116, 199, 236);
-const TEAL: Color = Color::Rgb(148, 226, 213);
-const GREEN: Color = Color::Rgb(166, 227, 161);
-const YELLOW: Color = Color::Rgb(249, 226, 175);
-const PEACH: Color = Color::Rgb(250, 179, 135);
-const RED: Color = Color::Rgb(243, 139, 168);
+pub(crate) const TEXT: Color = Color::Rgb(205, 214, 244);
+pub(crate) const SUBTEXT: Color = Color::Rgb(166, 173, 200);
+pub(crate) const MUTED: Color = Color::Rgb(108, 112, 134);
+pub(crate) const SURFACE: Color = Color::Rgb(49, 50, 68);
+pub(crate) const SELECTED: Color = Color::Rgb(40, 42, 58);
+pub(crate) const MAUVE: Color = Color::Rgb(203, 166, 247);
+pub(crate) const BLUE: Color = Color::Rgb(137, 180, 250);
+pub(crate) const SAPPHIRE: Color = Color::Rgb(116, 199, 236);
+pub(crate) const TEAL: Color = Color::Rgb(148, 226, 213);
+pub(crate) const GREEN: Color = Color::Rgb(166, 227, 161);
+pub(crate) const YELLOW: Color = Color::Rgb(249, 226, 175);
+pub(crate) const PEACH: Color = Color::Rgb(250, 179, 135);
+pub(crate) const RED: Color = Color::Rgb(243, 139, 168);
 
 const MIX: [(&str, Color); 4] = [("input", PEACH), ("cache write", MAUVE), ("cache read", TEAL), ("output", BLUE)];
 
@@ -58,7 +58,7 @@ fn load_color(value: f64) -> Color {
     }
 }
 
-fn status_color(status: &str) -> Color {
+pub(crate) fn status_color(status: &str) -> Color {
     match status {
         "working" => YELLOW,
         "idle" => GREEN,

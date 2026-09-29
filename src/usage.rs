@@ -199,26 +199,6 @@ pub fn find_transcript(agent: &str, session_id: &str) -> Option<PathBuf> {
     }
 }
 
-fn window_file(session_id: &str) -> PathBuf {
-    home().join(".cache/agent-tokens/windows").join(session_id)
-}
-
-/// Claude transcripts don't record the context window size; the status line reports it.
-pub fn remember_window(session_id: &str, window: u64) {
-    let path = window_file(session_id);
-    if fs::read_to_string(&path).ok().and_then(|raw| raw.trim().parse::<u64>().ok()) == Some(window) {
-        return;
-    }
-    if let Some(dir) = path.parent() {
-        let _ = fs::create_dir_all(dir);
-    }
-    let _ = fs::write(path, window.to_string());
-}
-
-fn remembered_window(session_id: &str) -> u64 {
-    fs::read_to_string(window_file(session_id)).ok().and_then(|raw| raw.trim().parse().ok()).unwrap_or(0)
-}
-
 pub fn supported(agent: &str) -> bool {
     matches!(agent, "claude" | "codex")
 }
@@ -305,7 +285,6 @@ fn load_claude(report: &mut Report) {
     }
 
     report.models = sorted_models(models);
-    report.context_window = remembered_window(&report.session_id);
     report.subagents = claude_subagents(&report.transcript.with_extension("").join("subagents"));
 }
 
@@ -437,26 +416,3 @@ fn sorted_models(models: HashMap<String, Totals>) -> Vec<(String, Totals)> {
     models
 }
 
-/// Current context and total output for a Claude transcript, without building a full report.
-pub fn claude_quick(path: &Path) -> (u64, u64) {
-    let Ok(file) = File::open(path) else { return (0, 0) };
-    let mut seen = HashSet::new();
-    let (mut context, mut output) = (0, 0);
-    for line in BufReader::new(file).lines().map_while(Result::ok) {
-        if !line.contains("\"usage\"") || line.contains("\"isSidechain\":true") {
-            continue;
-        }
-        let Ok(entry) = serde_json::from_str::<Value>(&line) else { continue };
-        let Some(message) = entry.get("message") else { continue };
-        let Some(usage) = message.get("usage").filter(|u| u.is_object()) else { continue };
-        if let Some(id) = text(message, "id") {
-            if !seen.insert(id.to_string()) {
-                continue;
-            }
-        }
-        let call = claude_call(usage);
-        output += call.output;
-        context = call.prompt();
-    }
-    (context, output)
-}
