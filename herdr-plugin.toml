@@ -1,18 +1,21 @@
 id = "agent-tokens"
 name = "Agent Tokens"
-version = "0.2.0"
+version = "0.3.0"
 min_herdr_version = "0.7.1"
-description = "Detailed token usage panel for Claude Code and Codex agents"
+description = "Token usage dashboard for Claude Code and Codex agents"
 platforms = ["macos", "linux"]
 
+[[build]]
+command = ["cargo", "build", "--release", "--locked"]
+
 [[actions]]
-id = "details"
-title = "Token usage"
-contexts = ["pane"]
-command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/open.py\""]
+id = "dashboard"
+title = "Token usage dashboard"
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["target/release/agent-tokens", "open"]
 
 [[panes]]
-id = "details"
-title = "Token usage"
+id = "dashboard"
+title = "Agent Tokens"
 placement = "overlay"
-command = ["sh", "-c", "exec python3 \"$HERDR_PLUGIN_ROOT/details.py\""]
+command = ["target/release/agent-tokens"]
