@@ -22,7 +22,7 @@ Keys: `↑↓`/`j k` agent · `←→`/`h l`/`1-4` view · `PgUp PgDn` scroll ·
 
 ## Install
 
-Requires Herdr 0.7.1+ and a Rust toolchain (`cargo`); the install builds the binary.
+Requires Herdr 0.9.0+ (the dashboard opens as a floating popup) and a Rust toolchain (`cargo`); the install builds the binary.
 
 ```sh
 herdr plugin install mikitahimpel/herdr-agent-tokens
