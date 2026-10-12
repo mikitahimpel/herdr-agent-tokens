@@ -58,6 +58,19 @@ description = "token usage"
 
 Then run `herdr server reload-config`. You can also open it with `herdr plugin action invoke agent-tokens.dashboard`.
 
+## Claude usage limits
+
+Claude transcripts don't record account limits; Claude Code only passes them to status line commands. Set this silent status line in `~/.claude/settings.json` to save them; it prints nothing:
+
+```json
+"statusLine": {
+  "type": "command",
+  "command": "$HOME/.config/herdr/plugins/github/agent-tokens-*/target/release/agent-tokens claude-limits"
+}
+```
+
+The dashboard then shows the 5-hour and 7-day windows (and any model-specific weekly window) in its header and in the Overview of Claude agents, with reset times and when they were last updated. They refresh whenever any Claude session updates its status line.
+
 ## Data sources
 
 | Agent  | Transcript                                                                 |
