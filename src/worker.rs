@@ -6,6 +6,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::herdr::{self, Agent};
+use crate::limits::{self, AccountLimits};
 use crate::usage::{self, Report};
 
 pub const REFRESH: Duration = Duration::from_secs(5);
@@ -22,6 +23,7 @@ pub enum Usage {
 pub struct Snapshot {
     pub agents: Vec<Agent>,
     pub usage: HashMap<String, Usage>,
+    pub claude_limits: Option<Arc<AccountLimits>>,
     pub error: Option<String>,
     pub at: Instant,
 }
@@ -47,8 +49,19 @@ fn stamp(path: &PathBuf) -> Stamp {
     vec![usage::modified(path), usage::modified(&path.with_extension("").join("subagents"))]
 }
 
-fn send(snapshots: &Sender<Snapshot>, agents: &[Agent], usage: &HashMap<String, Usage>) -> bool {
-    let snapshot = Snapshot { agents: agents.to_vec(), usage: usage.clone(), error: None, at: Instant::now() };
+fn send(
+    snapshots: &Sender<Snapshot>,
+    agents: &[Agent],
+    usage: &HashMap<String, Usage>,
+    claude_limits: &Option<Arc<AccountLimits>>,
+) -> bool {
+    let snapshot = Snapshot {
+        agents: agents.to_vec(),
+        usage: usage.clone(),
+        claude_limits: claude_limits.clone(),
+        error: None,
+        at: Instant::now(),
+    };
     snapshots.send(snapshot).is_ok()
 }
 
@@ -59,7 +72,9 @@ pub fn run(requests: Receiver<()>, snapshots: Sender<Snapshot>) {
     loop {
         let Some(agents) = herdr::list_agents() else {
             let error = Some("Couldn't reach Herdr. Is this running inside a Herdr pane?".into());
-            if snapshots.send(Snapshot { agents: Vec::new(), usage: HashMap::new(), error, at: Instant::now() }).is_err() {
+            let snapshot =
+                Snapshot { agents: Vec::new(), usage: HashMap::new(), claude_limits: None, error, at: Instant::now() };
+            if snapshots.send(snapshot).is_err() {
                 return;
             }
             if matches!(requests.recv_timeout(REFRESH), Err(RecvTimeoutError::Disconnected)) {
@@ -68,6 +83,7 @@ pub fn run(requests: Receiver<()>, snapshots: Sender<Snapshot>) {
             continue;
         };
 
+        let claude_limits = limits::load().map(Arc::new);
         let mut usage = HashMap::new();
         let mut jobs = Vec::new();
         for agent in &agents {
@@ -75,7 +91,7 @@ pub fn run(requests: Receiver<()>, snapshots: Sender<Snapshot>) {
             usage.insert(agent.pane_id.clone(), state);
             jobs.extend(job);
         }
-        if !send(&snapshots, &agents, &usage) {
+        if !send(&snapshots, &agents, &usage, &claude_limits) {
             return;
         }
 
@@ -91,7 +107,7 @@ pub fn run(requests: Receiver<()>, snapshots: Sender<Snapshot>) {
         for (job, report) in done_rx {
             usage.insert(job.pane_id.clone(), Usage::Ready(report.clone()));
             cache.insert(job.key, Cached { path: job.path, stamp: job.stamp, report });
-            if !send(&snapshots, &agents, &usage) {
+            if !send(&snapshots, &agents, &usage, &claude_limits) {
                 return;
             }
         }

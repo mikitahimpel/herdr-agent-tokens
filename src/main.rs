@@ -1,4 +1,5 @@
 mod herdr;
+mod limits;
 mod mini;
 mod ui;
 mod usage;
@@ -57,6 +58,7 @@ impl App {
 fn main() -> std::io::Result<()> {
     match std::env::args().nth(1).as_deref() {
         Some("open") => std::process::exit(herdr::open_dashboard()),
+        Some("claude-limits") => std::process::exit(limits::record()),
         Some("mini") => return mini::run(),
         _ => {}
     }

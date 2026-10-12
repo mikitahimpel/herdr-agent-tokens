@@ -11,7 +11,7 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
-use crate::usage::{ratio, Report, Totals};
+use crate::usage::{ratio, RateLimit, Report, Totals};
 use crate::worker::{Usage, REFRESH};
 use crate::{App, TABS};
 
@@ -131,13 +131,21 @@ fn draw_header(frame: &mut Frame, area: Rect, app: &App) {
     frame.render_widget(Paragraph::new(title), area);
     if let Some(snapshot) = &app.snapshot {
         let age = snapshot.at.elapsed().as_secs();
-        let status = format!(
-            "{} agents · updated {}s ago · auto {}s ",
-            snapshot.agents.len(),
-            age,
-            REFRESH.as_secs()
+        let mut spans = Vec::new();
+        if let Some(account) = &snapshot.claude_limits {
+            spans.push(Span::from("Claude ").fg(SUBTEXT));
+            for limit in &account.limits {
+                spans.push(Span::from(format!("{} ", limit_label(limit))).fg(MUTED));
+                spans.push(Span::from(percent(limit.used)).fg(load_color(limit.used)).bold());
+                spans.push(Span::from("  ").fg(MUTED));
+            }
+            spans.push(Span::from("· ").fg(MUTED));
+        }
+        spans.push(
+            Span::from(format!("{} agents · updated {}s ago · auto {}s ", snapshot.agents.len(), age, REFRESH.as_secs()))
+                .fg(MUTED),
         );
-        frame.render_widget(Paragraph::new(Line::from(status).fg(MUTED)).alignment(Alignment::Right), area);
+        frame.render_widget(Paragraph::new(Line::from(spans)).alignment(Alignment::Right), area);
     }
 }
 
@@ -222,7 +230,16 @@ fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
         tabs,
     );
     match app.tab {
-        0 => draw_overview(frame, content, &report),
+        0 => {
+            let (title, limits) = match (&snapshot.claude_limits, agent.kind.as_str()) {
+                (Some(account), "claude") => {
+                    let at = account.recorded.map(|t| t.format(" · as of %H:%M").to_string()).unwrap_or_default();
+                    (format!("Claude limits{at}"), account.limits.as_slice())
+                }
+                _ => ("Rate limits".to_string(), report.rate_limits.as_slice()),
+            };
+            draw_overview(frame, content, &report, &title, limits)
+        }
         1 => draw_prompts(frame, content, &report, app.scroll),
         2 => draw_subagents(frame, content, &report, app.scroll),
         _ => draw_models(frame, content, &report),
@@ -254,8 +271,17 @@ fn card(frame: &mut Frame, area: Rect, label: &str, value: String, color: Color,
     centered(frame, inner, lines);
 }
 
-fn draw_overview(frame: &mut Frame, area: Rect, report: &Report) {
-    let mut limits = if report.rate_limits.is_empty() { 0 } else { report.rate_limits.len() as u16 + 2 };
+fn limit_label(limit: &RateLimit) -> String {
+    let window = if limit.window_minutes >= 1440 {
+        format!("{}d", limit.window_minutes / 1440)
+    } else {
+        format!("{}h", limit.window_minutes / 60)
+    };
+    if limit.name.is_empty() { window } else { format!("{} {window}", limit.name) }
+}
+
+fn draw_overview(frame: &mut Frame, area: Rect, report: &Report, limits_title: &str, rate_limits: &[RateLimit]) {
+    let mut limits = if rate_limits.is_empty() { 0 } else { rate_limits.len() as u16 + 2 };
     let mut mix_height = 4;
     let mut chart_height = area.height.saturating_sub(5 + mix_height + limits);
     if chart_height < 8 {
@@ -300,29 +326,23 @@ fn draw_overview(frame: &mut Frame, area: Rect, report: &Report) {
     if mix.height >= 4 {
         draw_mix(frame, mix, &report.totals);
     }
-    if charts.height == 0 {
-        return;
+    if charts.height > 0 {
+        let [growth, bars] = Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(charts);
+        draw_growth(frame, growth, report);
+        draw_prompt_bars(frame, bars, report);
     }
-    let [growth, bars] = Layout::horizontal([Constraint::Percentage(55), Constraint::Percentage(45)]).areas(charts);
-    draw_growth(frame, growth, report);
-    draw_prompt_bars(frame, bars, report);
 
     if limit_area.height >= 3 {
-        let block = panel("Rate limits");
+        let block = panel(limits_title);
         let inner = block.inner(limit_area);
         frame.render_widget(block, limit_area);
-        let rows = Layout::vertical(vec![Constraint::Length(1); report.rate_limits.len()]).split(inner);
-        for (limit, row) in report.rate_limits.iter().zip(rows.iter()) {
-            let window = if limit.window_minutes >= 1440 {
-                format!("{}d", limit.window_minutes / 1440)
-            } else {
-                format!("{}h", limit.window_minutes / 60)
-            };
+        let rows = Layout::vertical(vec![Constraint::Length(1); rate_limits.len()]).split(inner);
+        for (limit, row) in rate_limits.iter().zip(rows.iter()) {
             let resets = limit.resets_at.map(|t| t.format("resets %a %H:%M").to_string()).unwrap_or_default();
             frame.render_widget(
                 LineGauge::default()
                     .ratio(limit.used.clamp(0.0, 1.0))
-                    .label(Line::from(format!("{} {window}  {:>4}  {resets}", limit.name, percent(limit.used))).fg(SUBTEXT))
+                    .label(Line::from(format!("{:<8} {:>4}  {resets}", limit_label(limit), percent(limit.used))).fg(SUBTEXT))
                     .filled_style(Style::new().fg(load_color(limit.used)))
                     .unfilled_style(Style::new().fg(SURFACE)),
                 *row,
