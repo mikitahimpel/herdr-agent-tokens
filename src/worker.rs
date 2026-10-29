@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
 
-use crate::herdr::{self, Agent};
+use crate::host::{self, Agent};
 use crate::limits::{self, AccountLimits};
 use crate::usage::{self, Report};
 
@@ -70,17 +70,20 @@ fn send(
 pub fn run(requests: Receiver<()>, snapshots: Sender<Snapshot>) {
     let mut cache: HashMap<String, Cached> = HashMap::new();
     loop {
-        let Some(agents) = herdr::list_agents() else {
-            let error = Some("Couldn't reach Herdr. Is this running inside a Herdr pane?".into());
-            let snapshot =
-                Snapshot { agents: Vec::new(), usage: HashMap::new(), claude_limits: None, error, at: Instant::now() };
-            if snapshots.send(snapshot).is_err() {
-                return;
+        let agents = match host::list_agents() {
+            Ok(agents) => agents,
+            Err(error) => {
+                let error = Some(error);
+                let snapshot =
+                    Snapshot { agents: Vec::new(), usage: HashMap::new(), claude_limits: None, error, at: Instant::now() };
+                if snapshots.send(snapshot).is_err() {
+                    return;
+                }
+                if matches!(requests.recv_timeout(REFRESH), Err(RecvTimeoutError::Disconnected)) {
+                    return;
+                }
+                continue;
             }
-            if matches!(requests.recv_timeout(REFRESH), Err(RecvTimeoutError::Disconnected)) {
-                return;
-            }
-            continue;
         };
 
         let claude_limits = limits::load().map(Arc::new);

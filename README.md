@@ -71,6 +71,19 @@ Claude transcripts don't record account limits; Claude Code only passes them to 
 
 The dashboard then shows the 5-hour and 7-day windows (and any model-specific weekly window) in its header and in the Overview of Claude agents, with reset times and when they were last updated. They refresh whenever any Claude session updates its status line.
 
+## Rex
+
+The dashboard also runs inside the Rex terminal multiplexer, for the Claude Code agents running in Rex panes. Agents come from `rex-agent list --json` (set `REX_AGENT_BIN` to its path if it isn't on `PATH`); each Rex session label shows as the workspace and the block ID as the pane.
+
+```sh
+cargo build --release
+AGENT_TOKENS_PANE=<block_id> target/release/agent-tokens
+```
+
+Without `AGENT_TOKENS_PANE`, it opens on the focused agent. The host is picked at startup: Rex when `REX_SESSION` is set and the process isn't inside Herdr (`HERDR_ENV=1` or `HERDR_PLUGIN_ROOT` set), Herdr otherwise. Set `AGENT_TOKENS_HOST=rex` or `AGENT_TOKENS_HOST=herdr` to choose explicitly.
+
+Under Rex, `agent-tokens open` and clicking a chip in the token bar (`agent-tokens mini`) run `rex do tokens_dashboard pane=<block_id>`, so define a `tokens_dashboard` action in your Rex `init.lua` that opens the dashboard with that `AGENT_TOKENS_PANE`.
+
 ## Data sources
 
 | Agent  | Transcript                                                                 |
@@ -78,7 +91,7 @@ The dashboard then shows the 5-hour and 7-day windows (and any model-specific we
 | claude | `~/.claude/projects/*/<session-id>.jsonl` and `<session-id>/subagents/`    |
 | codex  | `$CODEX_HOME/sessions/YYYY/MM/DD/*<session-id>.jsonl` (default `~/.codex`) |
 
-Sessions come from `herdr pane list`. Other agents are listed without usage.
+Sessions come from `herdr pane list` (or `rex-agent list --json` under Rex). Other agents are listed without usage.
 
 ## Development
 

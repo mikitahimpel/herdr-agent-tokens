@@ -11,6 +11,7 @@ use ratatui::widgets::{
 };
 use ratatui::Frame;
 
+use crate::host;
 use crate::usage::{ratio, RateLimit, Report, Totals};
 use crate::worker::{Usage, REFRESH};
 use crate::{App, TABS};
@@ -183,7 +184,7 @@ fn draw_agents(frame: &mut Frame, area: Rect, app: &mut App) {
                 Line::from(vec![
                     Span::from("  "),
                     Span::from(agent.status.clone()).fg(status_color(&agent.status)),
-                    Span::from(format!(" · {} · {}", agent.kind, agent.pane_id)).fg(MUTED),
+                    Span::from(format!(" · {} · {}", agent.kind, host::display_pane(&agent.pane_id))).fg(MUTED),
                 ]),
                 Line::from(""),
             ])
@@ -199,7 +200,7 @@ fn draw_agents(frame: &mut Frame, area: Rect, app: &mut App) {
 fn draw_detail(frame: &mut Frame, area: Rect, app: &App) {
     let snapshot = app.snapshot.as_ref().expect("snapshot is loaded");
     let Some(agent) = app.list.selected().and_then(|i| snapshot.agents.get(i)) else { return };
-    let title = format!("{} · {} · {}", agent.workspace, agent.kind, agent.pane_id);
+    let title = format!("{} · {} · {}", agent.workspace, agent.kind, host::display_pane(&agent.pane_id));
     let block = panel(&title);
     let inner = block.inner(area);
     frame.render_widget(block, area);

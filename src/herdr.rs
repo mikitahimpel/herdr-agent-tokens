@@ -3,14 +3,7 @@ use std::process::Command;
 
 use serde_json::Value;
 
-#[derive(Clone)]
-pub struct Agent {
-    pub pane_id: String,
-    pub workspace: String,
-    pub kind: String,
-    pub status: String,
-    pub session_id: Option<String>,
-}
+use crate::host::Agent;
 
 fn herdr_bin() -> String {
     std::env::var("HERDR_BIN_PATH").unwrap_or_else(|_| "herdr".to_string())
@@ -55,15 +48,12 @@ pub fn list_agents() -> Option<Vec<Agent>> {
                     .and_then(|s| s.get("value"))
                     .and_then(Value::as_str)
                     .map(str::to_string),
+                focused: false,
             }
         })
         .collect();
     agents.sort_by(|a, b| a.workspace.cmp(&b.workspace).then(a.pane_id.cmp(&b.pane_id)));
     Some(agents)
-}
-
-pub fn open_dashboard() -> i32 {
-    open_dashboard_for(initial_pane())
 }
 
 pub fn open_dashboard_for(pane: Option<String>) -> i32 {
