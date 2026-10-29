@@ -13,7 +13,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-use crate::herdr;
+use crate::host;
 use crate::ui::{compact, status_color, MAUVE, MUTED, SAPPHIRE, SELECTED, SUBTEXT, TEXT, BLUE};
 use crate::usage::ratio;
 use crate::worker::{self, Snapshot, Usage};
@@ -26,7 +26,8 @@ struct Chip {
 }
 
 fn short_pane(pane_id: &str) -> &str {
-    pane_id.rsplit(':').next().unwrap_or(pane_id)
+    let short = host::display_pane(pane_id);
+    short.rsplit(':').next().unwrap_or(short)
 }
 
 fn chip_spans(snapshot: &Snapshot, index: usize) -> Vec<Span<'static>> {
@@ -139,7 +140,7 @@ pub fn run() -> io::Result<()> {
                     match mouse.kind {
                         MouseEventKind::Down(MouseButton::Left) => {
                             if let Some(chip) = chips.iter().find(|c| c.area.contains(position)) {
-                                herdr::open_dashboard_for(Some(chip.pane_id.clone()));
+                                host::open_dashboard_for(Some(chip.pane_id.clone()));
                             }
                         }
                         MouseEventKind::Moved => hover = Some(position),

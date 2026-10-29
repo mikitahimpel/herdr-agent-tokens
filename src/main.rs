@@ -1,6 +1,8 @@
 mod herdr;
+mod host;
 mod limits;
 mod mini;
+mod rex;
 mod ui;
 mod usage;
 mod worker;
@@ -29,6 +31,7 @@ impl App {
         let previous = self.selected_pane().map(str::to_string).or_else(|| self.initial_pane.take());
         let index = previous
             .and_then(|pane| snapshot.agents.iter().position(|a| a.pane_id == pane))
+            .or_else(|| snapshot.agents.iter().position(|a| a.focused))
             .unwrap_or(0);
         self.list.select((!snapshot.agents.is_empty()).then_some(index));
         self.snapshot = Some(snapshot);
@@ -57,7 +60,7 @@ impl App {
 
 fn main() -> std::io::Result<()> {
     match std::env::args().nth(1).as_deref() {
-        Some("open") => std::process::exit(herdr::open_dashboard()),
+        Some("open") => std::process::exit(host::open_dashboard()),
         Some("claude-limits") => std::process::exit(limits::record()),
         Some("mini") => return mini::run(),
         _ => {}
@@ -66,7 +69,7 @@ fn main() -> std::io::Result<()> {
     let (snapshot_tx, snapshot_rx) = mpsc::channel();
     thread::spawn(move || worker::run(request_rx, snapshot_tx));
 
-    let mut app = App { snapshot: None, list: ListState::default(), tab: 0, scroll: 0, initial_pane: herdr::initial_pane() };
+    let mut app = App { snapshot: None, list: ListState::default(), tab: 0, scroll: 0, initial_pane: host::initial_pane() };
     let mut terminal = ratatui::init();
     let result = (|| -> std::io::Result<()> {
         loop {
